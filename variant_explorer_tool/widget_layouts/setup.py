@@ -8,6 +8,9 @@ setup (
 		url = '',
 		description = 'Various layouts for the variant explorer interface.'
 		long_description = '',
+		install_requires=[
+        	    'pillow',
+      		],
 		classifiers = [
 		'Programming Language :: Python',
 		'Programming Language :: Python :: 2',
