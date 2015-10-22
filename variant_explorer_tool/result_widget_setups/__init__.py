@@ -516,7 +516,7 @@ class populate_cohort_tab:
 
 def build_expect_file(gui_path, temp_dump, user_info):
 	#
-	expect_lines = r"""#!/usr/bin/expect -f
+	expect_lines = r"""#!/usr/bin/expect
 set timeout -1
 spawn bash {dir_name}recent_runs/{local_dump}current_command
 expect -re {{[Pp]assword}}
@@ -534,6 +534,7 @@ expect eof
 class populate_trio_igv_tab:
 	"""Populating the IGV tab."""
 	def __init__(self, **kwargs):
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.frame = kwargs['frame']
 		self.var_backend_dir = kwargs['var_backend_dir']
 		self.var_gui_abs_path = kwargs['gui_abs_path']
@@ -677,7 +678,8 @@ class populate_trio_igv_tab:
 		except:
 			pass
 		#
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		#
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
 		#
@@ -686,7 +688,10 @@ class populate_trio_igv_tab:
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 		#
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		#
 		server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -700,22 +705,20 @@ chmod 777 {backend_dir_name}{file_name}
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 		#
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		#
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 		#
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		#
 		self.place_image('{a}recent_runs/{b}trio_igv.png'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
-
-
-
-
-
-
-
-
 
 
 
