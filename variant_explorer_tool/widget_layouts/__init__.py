@@ -14,44 +14,57 @@ from PIL import Image, ImageTk
 from tkFileDialog import askopenfilenames
 import tkMessageBox
 from result_widget_setups import *
-#from interface_tool_result_widget_setups.result_widget_setups import *
 
 
-def the_quiting_callback(master, user_info, gui_path, backend_dir_name):
+def build_server_tester_expect_file(gui_path, temp_dump, user_info):
+	"""This function is only used during the server connection step. It has timeout of 5 seconds."""
+	expect_lines = r"""#!/usr/bin/expect
+set timeout 5
+spawn bash {dir_name}recent_runs/{local_dump}current_command
+expect -re {{[Pp]assword}}
+send "{passw}\n"
+expect eof
+""".format(dir_name=gui_path, local_dump=temp_dump, passw=user_info['server_user_password'])
+	## save this as an expect script
+	with open(gui_path+'recent_runs/'+temp_dump+'current_expect', 'w') as cmd:
+		cmd.write(expect_lines)
+
+
+def the_quiting_callback(direct_ssh_mode, server_connect_check, master, user_info, gui_path, backend_dir_name):
 	"""This function will delete the backend and frontend directories created for the purpose of storing temporary files."""
 	if tkMessageBox.askokcancel('Quit', 'Do you want to quit?'):
+		if (server_connect_check):
+			try:
+				clear_backend_dir(direct_ssh_mode, user_info, gui_path, backend_dir_name)
+			except:
+				pass
 		try:
 			os.system('rm -r {}'.format(gui_path+'recent_runs/'+backend_dir_name))
 		except:
 			pass
-		if (all(map(lambda x: re.match('\w', x), user_info.values())) and all(map(lambda x: re.search('\w$', x), user_info.values()))):
-			try:
-				clear_backend_dir(user_info, gui_path, backend_dir_name)
-				master.destroy()
-			except:
-				master.destroy()
-		else:
-			master.destroy()
+		master.destroy()
 
 
-def clear_backend_dir(var_user_settings, var_gui_abs_path, var_backend_dir):
+def clear_backend_dir(direct_ssh_mode, var_user_settings, var_gui_abs_path, var_backend_dir):
 	"""Removes the backend temporary directory if it exists."""
 	try:
-		build_expect_file(var_gui_abs_path, var_backend_dir, var_user_settings)
+		if (not direct_ssh_mode):
+			build_server_tester_expect_file(var_gui_abs_path, var_backend_dir, var_user_settings)
 		with open(var_gui_abs_path+'recent_runs/'+var_backend_dir+'server_command', 'w') as cmd:
 			cmd.write('rm -r {}'.format(var_backend_dir))
-		#
 		with open(var_gui_abs_path+'recent_runs/'+var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=var_gui_abs_path+'recent_runs/'+var_backend_dir+'server_command', user=var_user_settings['server_username'], server=var_user_settings['server_name'])]))
-		#
-		os.system('expect {}recent_runs/{}current_expect'.format(var_gui_abs_path, var_backend_dir))
+		if (direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=var_gui_abs_path, local_dump=var_backend_dir))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=var_gui_abs_path, b=var_backend_dir))
 	except:
 		pass
 
 
 def build_expect_file(gui_path, temp_dump, user_info):
 	"""Creates the expect script that spawns the current_command file."""
-	expect_lines = r"""#!/usr/bin/expect -f
+	expect_lines = r"""#!/usr/bin/expect
 set timeout -1
 spawn bash {dir_name}recent_runs/{local_dump}current_command
 expect -re {{[Pp]assword}}
@@ -65,22 +78,23 @@ expect eof
 		cmd.write(expect_lines)
 
 
-def create_temp_backend_dir(gui_path, var_backend_dir, user_info):
+def create_temp_backend_dir(direct_ssh_mode, gui_path, var_backend_dir, user_info):
 	"""Creates the temporary backend directory."""
-	build_expect_file(gui_path, var_backend_dir, user_info)
+	if (not direct_ssh_mode):
+		build_expect_file(gui_path, var_backend_dir, user_info)
 	server_cmd = r"""#!/usr/bin/env bash
 mkdir ~/{backend_dir_name}
 """.format(backend_dir_name=var_backend_dir)
-	#
 	with open(gui_path+'recent_runs/'+var_backend_dir+'server_command', 'w') as cmd:
 		cmd.write(server_cmd)
-	#
 	with open(gui_path+'recent_runs/'+var_backend_dir+'current_command', 'w') as cmd:
 		cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=gui_path+'recent_runs/'+var_backend_dir+'server_command', user=user_info['server_username'], server=user_info['server_name'])]))
-	#
-	os.system('expect {}recent_runs/{}current_expect'.format(gui_path, var_backend_dir))
-	#
+	if (direct_ssh_mode):
+		os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+	else:
+		os.system('expect {a}recent_runs/{b}current_expect'.format(a=gui_path, b=var_backend_dir))
 	time.sleep(1)
+
 
 
 def read_server_user_file(server_path):
@@ -91,10 +105,17 @@ def read_server_user_file(server_path):
 			server_user_file = server_user_file.readlines()
 			try:
 				server_user = list(map(lambda x: re.sub('\n','',x), server_user_file))
-				temp_dict['server_name'] = server_user[0]
-				temp_dict['server_username'] = server_user[1]
-				temp_dict['server_user_password'] = server_user[2]
-				return temp_dict
+				server_user = list(map(lambda x: re.sub('\s+','',x), server_user))
+				test_char = list(map(lambda x: not x, server_user))
+				if (len(test_char) == 3 and True not in test_char):
+					temp_dict['server_name'] = server_user[0]
+					temp_dict['server_username'] = server_user[1]
+					temp_dict['server_user_password'] = server_user[2]
+					return temp_dict
+				elif (len(test_char) == 2 and True not in test_char):
+					temp_dict['server_name'] = server_user[0]
+					temp_dict['server_user_password'] = server_user[1]
+					return temp_dict
 			except:
 				return temp_dict
 
@@ -107,6 +128,7 @@ def read_igv_user_file(igv_path):
 			igv_user_file = igv_user_file.readlines()
 			try:
 				igv_user = list(map(lambda x: re.sub('\n','',x), igv_user_file))
+				igv_user = list(map(lambda x: re.sub('\s+','',x), igv_user))
 				temp_dict['igv_username'] = igv_user[0]
 				temp_dict['igv_user_password'] = igv_user[1]
 				return temp_dict
@@ -134,6 +156,7 @@ class prepare_result_tabs_igv_included:
 	"""Create result tabs with an igv tab and populate."""
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
 		self.past_frame = kwargs['past_frame']
@@ -177,7 +200,7 @@ class prepare_result_tabs_igv_included:
 		self.tabs.pack(fill=BOTH, expand=True)
 		## populate the tabs with content/data
 		self.query_info_obj = populate_query_info_tab(self.query_info_tab, self.query_info)
-		self.igv_obj = populate_trio_igv_tab(query_info=self.query_info,frame=self.igv_tab, var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings)
+		self.igv_obj = populate_trio_igv_tab(direct_ssh_mode=self.direct_ssh_mode,query_info=self.query_info,frame=self.igv_tab, var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings)
 		self.trio_var_obj = populate_trio_variants_tab(self.trio_variants_tab, self.var_gui_abs_path, self.var_backend_dir)
 		self.trio_var_obj.prepare_varaints_for_display()
 	def backward(self, event):
@@ -353,6 +376,7 @@ class options_sidebar_setup:
 	"""Populate the options side bar."""
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.master = kwargs['master']
 		self.server_file_check = kwargs['check_server']
 		self.ddd_prod_check = kwargs['check_ddd_prod']
@@ -416,7 +440,8 @@ class options_sidebar_setup:
 		chrom_top = self.chrom_top.get()
 		pos_top = self.pos_top.get()
 		## prepare the expect file
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
 		## build the python script to be executed on the backend side
 		os.system('python {a}local_scripts/cohort_frequency_source_builder.py --o {b}recent_runs/{c}current_run.py --gui_path {d} --remote_dir {e} --chrom {f} --pos {g} --string_user_settings_dict \'{h}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_gui_abs_path, e=self.var_backend_dir, f=chrom_top, g=pos_top, h=string_user_settings))
@@ -424,7 +449,10 @@ class options_sidebar_setup:
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir=self.var_backend_dir)]))
 		## execute the expect script
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		## the bash commands to run on the server
 		server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -438,14 +466,20 @@ chmod 777 {file_name}
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 		##
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		## build the followup python script to be executed on the backend side
 		os.system('python {a}local_scripts/frequency_followup_source_builder.py --o {b}recent_runs/{c}current_run.py --gui_path {d} --remote_dir {e}'.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_gui_abs_path, e=self.var_backend_dir))
 		##
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir=self.var_backend_dir)]))
 		##
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		##
 		server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -459,17 +493,26 @@ chmod 777 {file_name}
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 		##
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		##
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], file_name=self.var_backend_dir+'final_freq', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 		##
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		##
 		with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], file_name=self.var_backend_dir+'total_vcfs', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 		##
-		os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+		if (self.direct_ssh_mode):
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		else:
+			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		## reading the server output files and displaying the variant frequency message
 		try:
 			frequency = {'variant_freq':'', 'cohort_vcfs':''}
@@ -485,7 +528,7 @@ chmod 777 {file_name}
 		self.top.destroy()
 	def quit(self, event):
 		"""The quit option calls the global quit method."""
-		the_quiting_callback(self.master, self.var_user_settings, self.var_gui_abs_path, self.var_backend_dir)
+		the_quiting_callback(self.direct_ssh_mode, self.server_file_check, self.master, self.var_user_settings, self.var_gui_abs_path, self.var_backend_dir)
 	def help_popup(self, event):
 		"""Method to display the help content for this widget."""
 		help_msg = '"Find variant frequency": find the number of times the variant occurs in the cohort VCFs. Using variant location, gene name or HGVS terminology.\n\n"Variant statistics": NA.\n'
@@ -508,6 +551,7 @@ class top_menu_setup:
 	"""Create and position the top menu bar."""
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.root_var = kwargs['root_var']
 		self.container_frame_var = kwargs['container_frame_var']
 		self.server_file_check = kwargs['check_server']
@@ -525,21 +569,21 @@ class top_menu_setup:
 		self.root_var.config(menu=self.top_bar)
 		##
 		self.node_1 = Menu(self.top_bar)
-		self.node_1.add_command(label='Child ID', command=lambda: genomic_coords_child_id(previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_igv=self.igv_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
+		self.node_1.add_command(label='Child ID', command=lambda: genomic_coords_child_id(direct_ssh_mode=self.direct_ssh_mode, previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_igv=self.igv_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
 		self.node_1.add_separator()
-		self.node_1.add_command(label='Cohort VCFs', command=lambda: genomic_coords_cohort(previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
+		self.node_1.add_command(label='Cohort VCFs', command=lambda: genomic_coords_cohort(direct_ssh_mode=self.direct_ssh_mode, previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
 		self.node_1.add_separator()
 		##
 		self.node_2 = Menu(self.top_bar)
-		self.node_2.add_command(label='Child ID', command=lambda: gene_name_child_id(previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_igv=self.igv_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
+		self.node_2.add_command(label='Child ID', command=lambda: gene_name_child_id(direct_ssh_mode=self.direct_ssh_mode, previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_igv=self.igv_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
 		self.node_2.add_separator()
-		self.node_2.add_command(label='Cohort VCFs', command=lambda: gene_name_cohort(previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
+		self.node_2.add_command(label='Cohort VCFs', command=lambda: gene_name_cohort(direct_ssh_mode=self.direct_ssh_mode, previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
 		self.node_2.add_separator()
 		##
 		self.node_3 = Menu(self.top_bar)
-		self.node_3.add_command(label='Child ID', command=lambda: hgvs_child_id(previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_igv=self.igv_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
+		self.node_3.add_command(label='Child ID', command=lambda: hgvs_child_id(direct_ssh_mode=self.direct_ssh_mode, previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, check_server =self.server_file_check, check_igv=self.igv_file_check, check_ddd_prod = self.ddd_prod_check, var_gui_abs_path=self.gui_abs_path_var, var_user_settings=self.user_settings_var))
 		self.node_3.add_separator()
-		self.node_3.add_command(label='Cohort VCFs', command=lambda: hgvs_cohort(previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, var_gui_abs_path=self.gui_abs_path_var, check_server =self.server_file_check, check_ddd_prod = self.ddd_prod_check, var_user_settings=self.user_settings_var))
+		self.node_3.add_command(label='Cohort VCFs', command=lambda: hgvs_cohort(direct_ssh_mode=self.direct_ssh_mode, previous_frame_object=self.startup_object_var, previous_frame=self.startup_frame_var, present_frame=self.user_input_frame_var, next_frame=self.results_frame_var, var_backend_dir=self.backend_dir_var, var_gui_abs_path=self.gui_abs_path_var, check_server =self.server_file_check, check_ddd_prod = self.ddd_prod_check, var_user_settings=self.user_settings_var))
 		self.node_3.add_separator()
 		##
 		self.submenu1 = Menu(self.top_bar)
@@ -566,6 +610,7 @@ class calculator_setup:
 	"""Create and place calculator and its functionalities."""
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.sidebar_frame_var = kwargs['side_frame_var']
 		self.master = kwargs['master']
 		self.server_file_check = kwargs['check_server']
@@ -647,7 +692,8 @@ class calculator_setup:
 		except:
 			pass
 		## build an expect file
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		## get the user input
 		user_gene = re.sub('\n', '', self.gene_name_entry.get())
 		user_hgvs = re.sub('\n', '', self.hgvs_entry.get())
@@ -660,7 +706,10 @@ class calculator_setup:
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			##
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			##
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -674,12 +723,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			##
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			##
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='gene_calculator_out.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			##
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			## reading the server output file
 			gene_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/'+self.var_backend_dir+'gene_calculator_out.json'
 			gene_calculator_json = {}
@@ -721,14 +776,18 @@ chmod 777 {backend_dir_name}{file_name}
 				regex_m = re.search('^(ENST\d+)', user_hgvs)
 				user_transcript = regex_m.group(1)
 				##
-				build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+				if (not self.direct_ssh_mode):
+					build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 				##
 				os.system('python {a}local_scripts/hgvs_calculator_ensemble_source_builder.py --o {b}recent_runs/{c}current_run.pl --remote_dir {d} --hgvs_transcript \'{e}\' --hgvs_term \'{f}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_backend_dir, e=user_transcript, f=user_hgvs))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.pl', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -742,12 +801,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				hgvs_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'hgvs_coords.tsv'
 				##
@@ -772,14 +837,18 @@ chmod 777 {backend_dir_name}{file_name}
 					self.stop_var.set("NA")
 			elif (is_a_refseq_transcript):# Refseq case procedure:
 				## create expect file
-				build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+				if (not self.direct_ssh_mode):
+					build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 				##
 				os.system('python {a}local_scripts/hgvs_calculator_refseq_source_builder.py --o {b}recent_runs/{c}current_run.py --gui_path {d} --remote_dir {e} --hgvs \'{f}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_gui_abs_path, e=self.var_backend_dir, f=user_hgvs))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -793,12 +862,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				hgvs_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'hgvs_coords.tsv'
 				##
@@ -846,6 +921,7 @@ class genomic_coords_child_id:
 	LOF = ['transcript_ablation','splice_donor_variant','splice_acceptor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','inframe_insertion','inframe_deletion','missense_variant','transcript_amplification','protein_altering_variant']
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame_object = kwargs['previous_frame_object']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
@@ -873,9 +949,22 @@ class genomic_coords_child_id:
 		time.sleep(1)
 		## the error collection variable
 		self.error_collect = ''
+		## setting up the scrollbars
+		self.present_frame_y = Scrollbar(self.present_frame, orient=VERTICAL)
+		self.present_frame_y.pack(fill=Y, side=RIGHT)
+		self.present_frame_x = Scrollbar(self.present_frame, orient=HORIZONTAL)
+		self.present_frame_x.pack(fill=X, side=BOTTOM)
+		self.present_canvas = Canvas(self.present_frame, bg='#E0E0E0', highlightbackground='#E0E0E0', highlightcolor='#E0E0E0', yscrollcommand=self.present_frame_y.set, xscrollcommand=self.present_frame_x.set)
+		self.present_canvas.pack(fill=BOTH, expand=True)
+		self.present_canvas.configure(scrollregion=(0,0,1000,1000))
+		self.present_frame_y.config(command=self.present_canvas.yview)
+		self.present_frame_x.config(command=self.present_canvas.xview)
+		self.widget_layer = Frame(self.present_canvas, bg='#E0E0E0')
+		self.widget_layer.pack()
+		self.present_canvas.create_window(0, 0, window=self.widget_layer, anchor='nw')
 		## create the Back and Next buttons of this frame and bind them to methods
-		self.window_navigation = Frame(self.present_frame, bg='#E0E0E0')
-		self.window_navigation.pack(fill=X, expand=False, pady=5)
+		self.window_navigation = Frame(self.widget_layer, bg='#E0E0E0')
+		self.window_navigation.pack(fill=X, expand=False, pady=10, padx=100)
 		self.window_navigation.columnconfigure(0, weight=1)
 		self.window_navigation.columnconfigure(1, weight=1)
 		self.window_navigation.rowconfigure(0, weight=1)
@@ -890,8 +979,8 @@ class genomic_coords_child_id:
 		self.next_window.grid(row=0, column=1, sticky=W)
 		self.next_window.configure(state='disabled')
 		## creating the labels and entries in the input layout
-		self.parameters = LabelFrame(self.present_frame, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.parameters.pack(fill=X, expand=False, pady=8)
+		self.parameters = LabelFrame(self.widget_layer, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.parameters.pack(fill=X, expand=False, pady=10, padx=100)
 		self.parameters.columnconfigure(0, weight=1)
 		self.parameters.columnconfigure(1, weight=1)
 		self.parameters.columnconfigure(2, weight=1)
@@ -908,7 +997,7 @@ class genomic_coords_child_id:
 		self.chr_label = Label(self.parameters, text='Chromosome:', bg='#C8C8C8')
 		self.chr_var = StringVar(self.parameters)
 		self.chr_var.set('1')
-		self.chrs = list(range(1,22))
+		self.chrs = list(range(1,23))
 		self.chrs.extend(['X', 'Y'])
 		self.chr_menu = OptionMenu(self.parameters, self.chr_var, *self.chrs)
 		self.chr_menu.config(bg='#C8C8C8')
@@ -938,8 +1027,8 @@ class genomic_coords_child_id:
 		self.help1.bind("<Leave>", lambda event: self.help1.configure(relief=GROOVE))
 		self.help1.bind("<Enter>", lambda event: self.help1.configure(cursor='hand', relief=RAISED))
 		#
-		self.max_af = LabelFrame(self.present_frame, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.max_af.pack(fill=X, expand=False, pady=8)
+		self.max_af = LabelFrame(self.widget_layer, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.max_af.pack(fill=X, expand=False, pady=10, padx=100)
 		self.max_af.columnconfigure(0, weight=1)
 		self.max_af.columnconfigure(1, weight=1)
 		self.max_af.columnconfigure(2, weight=1)
@@ -962,8 +1051,8 @@ class genomic_coords_child_id:
 		self.help2.bind("<Leave>", lambda event: self.help2.configure(relief=GROOVE))
 		self.help2.bind("<Enter>", lambda event: self.help2.configure(cursor='hand', relief=RAISED))
 		#
-		self.cq_frame = LabelFrame(self.present_frame, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.cq_frame.pack(fill=X, expand=False, pady=8)
+		self.cq_frame = LabelFrame(self.widget_layer, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.cq_frame.pack(fill=X, expand=False, pady=10, padx=100)
 		self.cq_frame.columnconfigure(0, weight=1)
 		self.cq_frame.columnconfigure(1, weight=1)
 		self.cq_frame.rowconfigure(0, weight=1)
@@ -1003,8 +1092,8 @@ class genomic_coords_child_id:
 		self.help3.bind("<Leave>", lambda event: self.help3.configure(relief=GROOVE))
 		self.help3.bind("<Enter>", lambda event: self.help3.configure(cursor='hand', relief=RAISED))
 		#
-		self.submit_button = Button(self.present_frame, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
-		self.submit_button.pack(pady=8)
+		self.submit_button = Button(self.widget_layer, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
+		self.submit_button.pack(pady=10, padx=100)
 		## if the global variables that check the dot server/ddd_prod files are false or None, the Run button is disabled.
 		if (not self.server_file_check or not self.ddd_prod_check):
 			self.submit_button.configure(state='disabled')
@@ -1066,8 +1155,9 @@ class genomic_coords_child_id:
 		tkMessageBox.showinfo(title='CQ', message=help3_msg)
 	def backend_variant_execution(self):
 		"""This method starts the backend execution steps for variant extraction."""
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		## do if the error collection variable is not
 		if (not self.error_collect):
 			## do the routine procedure: create local script, send and execute on backend, transfer result to frontend.
@@ -1076,7 +1166,10 @@ class genomic_coords_child_id:
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1090,12 +1183,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def backend_igv_execution(self):
 		"""This method starts the backend execution steps for IGV retrieval."""
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
@@ -1108,7 +1207,10 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1122,12 +1224,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
 		"""Aesthetic method to create an indeterminate progress bar."""
 		self.progress = ttk.Progressbar(self.present_frame, orient="horizontal", length=300, mode="indeterminate")
@@ -1204,7 +1312,7 @@ chmod 777 {backend_dir_name}{file_name}
 			if (self.user_input['igv'] == 'no'):
 				prepare_result_tabs_igv_excluded(gui_abs_path=self.var_gui_abs_path,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input,backend_dir=self.var_backend_dir)
 			elif (self.user_input['igv'] == 'yes'):
-				prepare_result_tabs_igv_included(var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input)
+				prepare_result_tabs_igv_included(direct_ssh_mode=self.direct_ssh_mode,var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input)
 	def variant_sanity_check_and_proceed(self):
 		"""This method reads the JSON file from the server and checks the error key."""
 		variant_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'trio_variants.json'
@@ -1244,6 +1352,7 @@ class genomic_coords_cohort:
 	LOF = ['transcript_ablation','splice_donor_variant','splice_acceptor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','inframe_insertion','inframe_deletion','missense_variant','transcript_amplification','protein_altering_variant']
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame_object = kwargs['previous_frame_object']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
@@ -1270,9 +1379,22 @@ class genomic_coords_cohort:
 		time.sleep(1)
 		## the error collection variable
 		self.error_collect = ''
+		## setting up the scrollbars
+		self.present_frame_y = Scrollbar(self.present_frame, orient=VERTICAL)
+		self.present_frame_y.pack(fill=Y, side=RIGHT)
+		self.present_frame_x = Scrollbar(self.present_frame, orient=HORIZONTAL)
+		self.present_frame_x.pack(fill=X, side=BOTTOM)
+		self.present_canvas = Canvas(self.present_frame, bg='#E0E0E0', highlightbackground='#E0E0E0', highlightcolor='#E0E0E0', yscrollcommand=self.present_frame_y.set, xscrollcommand=self.present_frame_x.set)
+		self.present_canvas.pack(fill=BOTH, expand=True)
+		self.present_canvas.configure(scrollregion=(0,0,1000,1000))
+		self.present_frame_y.config(command=self.present_canvas.yview)
+		self.present_frame_x.config(command=self.present_canvas.xview)
+		self.widget_layer = Frame(self.present_canvas, bg='#E0E0E0')
+		self.widget_layer.pack()
+		self.present_canvas.create_window(0, 0, window=self.widget_layer, anchor='nw')
 		## create the Back and Next buttons of this frame and bind them to methods
-		self.window_navigation = Frame(self.present_frame, bg='#E0E0E0')
-		self.window_navigation.pack(fill=X, expand=False, pady=5)
+		self.window_navigation = Frame(self.widget_layer, bg='#E0E0E0')
+		self.window_navigation.pack(fill=X, expand=False, pady=10, padx=100)
 		self.window_navigation.columnconfigure(0, weight=1)
 		self.window_navigation.columnconfigure(1, weight=1)
 		self.window_navigation.rowconfigure(0, weight=1)
@@ -1287,8 +1409,8 @@ class genomic_coords_cohort:
 		self.next_window.grid(row=0, column=1, sticky=W)
 		self.next_window.configure(state='disabled')
 		## creating the labels and entries in the input layout
-		self.parameters = LabelFrame(self.present_frame, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.parameters.pack(fill=X, expand=False, pady=8)
+		self.parameters = LabelFrame(self.widget_layer, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.parameters.pack(fill=X, expand=False, pady=10, padx=100)
 		self.parameters.columnconfigure(0, weight=1)
 		self.parameters.columnconfigure(1, weight=1)
 		self.parameters.columnconfigure(2, weight=1)
@@ -1310,7 +1432,7 @@ class genomic_coords_cohort:
 		self.chr_label = Label(self.parameters, text='Chromosome:', bg='#C8C8C8')
 		self.chr_var = StringVar(self.parameters)
 		self.chr_var.set('1')
-		self.chrs = list(range(1,22))
+		self.chrs = list(range(1,23))
 		self.chrs.extend(['X', 'Y'])
 		self.chr_menu = OptionMenu(self.parameters, self.chr_var, *self.chrs)
 		self.chr_menu.config(bg='#C8C8C8')
@@ -1323,8 +1445,8 @@ class genomic_coords_cohort:
 		self.help1.bind("<Leave>", lambda event: self.help1.configure(relief=GROOVE))
 		self.help1.bind("<Enter>", lambda event: self.help1.configure(cursor='hand', relief=RAISED))
 		#
-		self.max_af = LabelFrame(self.present_frame, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.max_af.pack(fill=X, expand=False, pady=8)
+		self.max_af = LabelFrame(self.widget_layer, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.max_af.pack(fill=X, expand=False, pady=10, padx=100)
 		self.max_af.columnconfigure(0, weight=1)
 		self.max_af.columnconfigure(1, weight=1)
 		self.max_af.columnconfigure(2, weight=1)
@@ -1347,8 +1469,8 @@ class genomic_coords_cohort:
 		self.help2.bind("<Leave>", lambda event: self.help2.configure(relief=GROOVE))
 		self.help2.bind("<Enter>", lambda event: self.help2.configure(cursor='hand', relief=RAISED))
 		#
-		self.cq_frame = LabelFrame(self.present_frame, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.cq_frame.pack(fill=X, expand=False, pady=8)
+		self.cq_frame = LabelFrame(self.widget_layer, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.cq_frame.pack(fill=X, expand=False, pady=10, padx=100)
 		self.cq_frame.columnconfigure(0, weight=1)
 		self.cq_frame.columnconfigure(1, weight=1)
 		self.cq_frame.rowconfigure(0, weight=1)
@@ -1387,8 +1509,8 @@ class genomic_coords_cohort:
 		self.help3.bind("<Leave>", lambda event: self.help3.configure(relief=GROOVE))
 		self.help3.bind("<Enter>", lambda event: self.help3.configure(cursor='hand', relief=RAISED))
 		#
-		self.submit_button = Button(self.present_frame, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
-		self.submit_button.pack(pady=8)
+		self.submit_button = Button(self.widget_layer, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
+		self.submit_button.pack(pady=10, padx=100)
 		## if the global variables that check the dot server/ddd_prod files are false or None, the Run button is disabled.
 		if (not self.server_file_check or not self.ddd_prod_check):
 			self.submit_button.configure(state='disabled')
@@ -1445,8 +1567,9 @@ class genomic_coords_cohort:
 		tkMessageBox.showinfo(title='CQ', message=help3_msg)
 	def backend_variant_execution(self):
 		"""This method starts the backend execution steps for variant extraction."""
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		## do if the error collection variable is not
 		if (not self.error_collect):
 			## do the routine procedure: create local script, send and execute on backend, transfer result to frontend.
@@ -1455,7 +1578,10 @@ class genomic_coords_cohort:
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1469,12 +1595,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='cohort_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			## run the first check point
 			self.sanity_check_and_proceed()
 			if (not self.error_collect):
@@ -1484,6 +1616,9 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				server_cmd = r"""#!/usr/bin/env bash
@@ -1498,12 +1633,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='selected_cohort_variants.tsv.gz', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				os.system('gunzip {a}recent_runs/{b}selected_cohort_variants.tsv.gz'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
@@ -1592,6 +1733,7 @@ class gene_name_child_id:
 	LOF = ['transcript_ablation','splice_donor_variant','splice_acceptor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','inframe_insertion','inframe_deletion','missense_variant','transcript_amplification','protein_altering_variant']
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame_object = kwargs['previous_frame_object']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
@@ -1619,9 +1761,22 @@ class gene_name_child_id:
 		time.sleep(1)
 		## the error collection variable
 		self.error_collect = ''
+		## setting up the scrollbars
+		self.present_frame_y = Scrollbar(self.present_frame, orient=VERTICAL)
+		self.present_frame_y.pack(fill=Y, side=RIGHT)
+		self.present_frame_x = Scrollbar(self.present_frame, orient=HORIZONTAL)
+		self.present_frame_x.pack(fill=X, side=BOTTOM)
+		self.present_canvas = Canvas(self.present_frame, bg='#E0E0E0', highlightbackground='#E0E0E0', highlightcolor='#E0E0E0', yscrollcommand=self.present_frame_y.set, xscrollcommand=self.present_frame_x.set)
+		self.present_canvas.pack(fill=BOTH, expand=True)
+		self.present_canvas.configure(scrollregion=(0,0,1000,1000))
+		self.present_frame_y.config(command=self.present_canvas.yview)
+		self.present_frame_x.config(command=self.present_canvas.xview)
+		self.widget_layer = Frame(self.present_canvas, bg='#E0E0E0')
+		self.widget_layer.pack()
+		self.present_canvas.create_window(0, 0, window=self.widget_layer, anchor='nw')
 		## create the Back and Next buttons of this frame and bind them to methods
-		self.window_navigation = Frame(self.present_frame, bg='#E0E0E0')
-		self.window_navigation.pack(fill=X, expand=False, pady=5)
+		self.window_navigation = Frame(self.widget_layer, bg='#E0E0E0')
+		self.window_navigation.pack(fill=X, expand=False, pady=10, padx=100)
 		self.window_navigation.columnconfigure(0, weight=1)
 		self.window_navigation.columnconfigure(1, weight=1)
 		self.window_navigation.rowconfigure(0, weight=1)
@@ -1636,8 +1791,8 @@ class gene_name_child_id:
 		self.next_window.grid(row=0, column=1, sticky=W)
 		self.next_window.configure(state='disabled')
 		## creating the labels and entries in the input layout
-		self.parameters = LabelFrame(self.present_frame, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.parameters.pack(fill=X, expand=False, pady=8)
+		self.parameters = LabelFrame(self.widget_layer, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.parameters.pack(fill=X, expand=False, pady=10, padx=100)
 		self.parameters.columnconfigure(0, weight=1)
 		self.parameters.columnconfigure(1, weight=1)
 		self.parameters.columnconfigure(2, weight=1)
@@ -1667,8 +1822,8 @@ class gene_name_child_id:
 		self.help1.bind("<Leave>", lambda event: self.help1.configure(relief=GROOVE))
 		self.help1.bind("<Enter>", lambda event: self.help1.configure(cursor='hand', relief=RAISED))
 		#
-		self.max_af = LabelFrame(self.present_frame, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.max_af.pack(fill=X, expand=False, pady=8)
+		self.max_af = LabelFrame(self.widget_layer, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.max_af.pack(fill=X, expand=False, pady=10, padx=100)
 		self.max_af.columnconfigure(0, weight=1)
 		self.max_af.columnconfigure(1, weight=1)
 		self.max_af.columnconfigure(2, weight=1)
@@ -1691,8 +1846,8 @@ class gene_name_child_id:
 		self.help2.bind("<Leave>", lambda event: self.help2.configure(relief=GROOVE))
 		self.help2.bind("<Enter>", lambda event: self.help2.configure(cursor='hand', relief=RAISED))
 		#
-		self.cq_frame = LabelFrame(self.present_frame, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.cq_frame.pack(fill=X, expand=False, pady=8)
+		self.cq_frame = LabelFrame(self.widget_layer, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.cq_frame.pack(fill=X, expand=False, pady=10, padx=100)
 		self.cq_frame.columnconfigure(0, weight=1)
 		self.cq_frame.columnconfigure(1, weight=1)
 		self.cq_frame.rowconfigure(0, weight=1)
@@ -1734,8 +1889,8 @@ class gene_name_child_id:
 		self.help3.bind("<Leave>", lambda event: self.help3.configure(relief=GROOVE))
 		self.help3.bind("<Enter>", lambda event: self.help3.configure(cursor='hand', relief=RAISED))
 		#
-		self.submit_button = Button(self.present_frame, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
-		self.submit_button.pack(pady=8)
+		self.submit_button = Button(self.widget_layer, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
+		self.submit_button.pack(pady=10, padx=100)
 		## if the global variables that check the dot server/ddd_prod files are false or None, the Run button is disabled.
 		if (not self.server_file_check or not self.ddd_prod_check):
 			self.submit_button.configure(state='disabled')
@@ -1792,8 +1947,9 @@ class gene_name_child_id:
 		tkMessageBox.showinfo(title='CQ', message=help3_msg)
 	def backend_variant_execution(self):
 		"""This method starts the backend execution steps for variant extraction."""
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		## do if the error collection variable is not
 		if (not self.error_collect):
 			## this first part is used to provide this instance with a start and stop attributes corresponding to the gene name
@@ -1802,7 +1958,10 @@ class gene_name_child_id:
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1816,12 +1975,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='gene_calculator_out.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			gene_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/'+self.var_backend_dir+'gene_calculator_out.json'
 			gene_calculator_json = {}
@@ -1860,7 +2025,10 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1874,12 +2042,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def backend_igv_execution(self):
 		"""This method starts the backend execution steps for IGV retrieval."""
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
@@ -1892,7 +2066,10 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1906,12 +2083,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
 		"""Aesthetic method to create an indeterminate progress bar."""
 		self.progress = ttk.Progressbar(self.present_frame, orient="horizontal", length=300, mode="indeterminate")
@@ -1988,7 +2171,7 @@ chmod 777 {backend_dir_name}{file_name}
 			if (self.user_input['igv'] == 'no'):
 				prepare_result_tabs_igv_excluded(gui_abs_path=self.var_gui_abs_path,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input,backend_dir=self.var_backend_dir)
 			elif (self.user_input['igv'] == 'yes'):
-				prepare_result_tabs_igv_included(var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input)
+				prepare_result_tabs_igv_included(direct_ssh_mode=self.direct_ssh_mode,var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input)
 	def variant_sanity_check_and_proceed(self):
 		"""This method reads the JSON file from the server and checks the error key."""
 		variant_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'trio_variants.json'
@@ -2028,6 +2211,7 @@ class gene_name_cohort:
 	LOF = ['transcript_ablation','splice_donor_variant','splice_acceptor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','inframe_insertion','inframe_deletion','missense_variant','transcript_amplification','protein_altering_variant']
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame_object = kwargs['previous_frame_object']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
@@ -2054,9 +2238,22 @@ class gene_name_cohort:
 		time.sleep(1)
 		## the error collection variable
 		self.error_collect = ''
+		## setting up the scrollbars
+		self.present_frame_y = Scrollbar(self.present_frame, orient=VERTICAL)
+		self.present_frame_y.pack(fill=Y, side=RIGHT)
+		self.present_frame_x = Scrollbar(self.present_frame, orient=HORIZONTAL)
+		self.present_frame_x.pack(fill=X, side=BOTTOM)
+		self.present_canvas = Canvas(self.present_frame, bg='#E0E0E0', highlightbackground='#E0E0E0', highlightcolor='#E0E0E0', yscrollcommand=self.present_frame_y.set, xscrollcommand=self.present_frame_x.set)
+		self.present_canvas.pack(fill=BOTH, expand=True)
+		self.present_canvas.configure(scrollregion=(0,0,1000,1000))
+		self.present_frame_y.config(command=self.present_canvas.yview)
+		self.present_frame_x.config(command=self.present_canvas.xview)
+		self.widget_layer = Frame(self.present_canvas, bg='#E0E0E0')
+		self.widget_layer.pack()
+		self.present_canvas.create_window(0, 0, window=self.widget_layer, anchor='nw')
 		## create the Back and Next buttons of this frame and bind them to methods
-		self.window_navigation = Frame(self.present_frame, bg='#E0E0E0')
-		self.window_navigation.pack(fill=X, expand=False, pady=5)
+		self.window_navigation = Frame(self.widget_layer, bg='#E0E0E0')
+		self.window_navigation.pack(fill=X, expand=False, pady=10, padx=100)
 		self.window_navigation.columnconfigure(0, weight=1)
 		self.window_navigation.columnconfigure(1, weight=1)
 		self.window_navigation.rowconfigure(0, weight=1)
@@ -2071,8 +2268,8 @@ class gene_name_cohort:
 		self.next_window.grid(row=0, column=1, sticky=W)
 		self.next_window.configure(state='disabled')
 		## creating the labels and entries in the input layout
-		self.parameters = LabelFrame(self.present_frame, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.parameters.pack(fill=X, expand=False, pady=8)
+		self.parameters = LabelFrame(self.widget_layer, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.parameters.pack(fill=X, expand=False, pady=10, padx=100)
 		self.parameters.columnconfigure(0, weight=1)
 		self.parameters.columnconfigure(1, weight=1)
 		self.parameters.rowconfigure(0, weight=1)
@@ -2089,8 +2286,8 @@ class gene_name_cohort:
 		self.help1.bind("<Leave>", lambda event: self.help1.configure(relief=GROOVE))
 		self.help1.bind("<Enter>", lambda event: self.help1.configure(cursor='hand', relief=RAISED))
 		#
-		self.max_af = LabelFrame(self.present_frame, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.max_af.pack(fill=X, expand=False, pady=8)
+		self.max_af = LabelFrame(self.widget_layer, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.max_af.pack(fill=X, expand=False, pady=10, padx=100)
 		self.max_af.columnconfigure(0, weight=1)
 		self.max_af.columnconfigure(1, weight=1)
 		self.max_af.columnconfigure(2, weight=1)
@@ -2113,8 +2310,8 @@ class gene_name_cohort:
 		self.help2.bind("<Leave>", lambda event: self.help2.configure(relief=GROOVE))
 		self.help2.bind("<Enter>", lambda event: self.help2.configure(cursor='hand', relief=RAISED))
 		#
-		self.cq_frame = LabelFrame(self.present_frame, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.cq_frame.pack(fill=X, expand=False, pady=8)
+		self.cq_frame = LabelFrame(self.widget_layer, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.cq_frame.pack(fill=X, expand=False, pady=10, padx=100)
 		self.cq_frame.columnconfigure(0, weight=1)
 		self.cq_frame.columnconfigure(1, weight=1)
 		self.cq_frame.rowconfigure(0, weight=1)
@@ -2155,8 +2352,8 @@ class gene_name_cohort:
 		self.help3.bind("<Leave>", lambda event: self.help3.configure(relief=GROOVE))
 		self.help3.bind("<Enter>", lambda event: self.help3.configure(cursor='hand', relief=RAISED))
 		#
-		self.submit_button = Button(self.present_frame, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
-		self.submit_button.pack(pady=8)
+		self.submit_button = Button(self.widget_layer, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
+		self.submit_button.pack(pady=10, padx=100)
 		## if the global variables that check the dot server/ddd_prod files are false or None, the Run button is disabled.
 		if (not self.server_file_check or not self.ddd_prod_check):
 			self.submit_button.configure(state='disabled')
@@ -2208,8 +2405,9 @@ class gene_name_cohort:
 		tkMessageBox.showinfo(title='CQ', message=help3_msg)
 	def backend_variant_execution(self):
 		"""This method starts the backend execution steps for variant extraction."""
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)		
 		## do if the error collection variable is not
 		if (not self.error_collect):
 			## do the routine procedure: create local script, send and execute on backend, transfer result to frontend.
@@ -2218,7 +2416,10 @@ class gene_name_cohort:
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -2232,12 +2433,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='cohort_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			self.sanity_check_and_proceed()
 			## do if the error collection variable is not
@@ -2248,7 +2455,10 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -2262,12 +2472,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='selected_cohort_variants.tsv.gz', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				os.system('gunzip {a}recent_runs/{b}selected_cohort_variants.tsv.gz'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
@@ -2356,6 +2572,7 @@ class hgvs_child_id:
 	LOF = ['transcript_ablation','splice_donor_variant','splice_acceptor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','inframe_insertion','inframe_deletion','missense_variant','transcript_amplification','protein_altering_variant']
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame_object = kwargs['previous_frame_object']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
@@ -2383,9 +2600,22 @@ class hgvs_child_id:
 		time.sleep(1)
 		## the error collection variable
 		self.error_collect = ''
+		## setting up the scrollbars
+		self.present_frame_y = Scrollbar(self.present_frame, orient=VERTICAL)
+		self.present_frame_y.pack(fill=Y, side=RIGHT)
+		self.present_frame_x = Scrollbar(self.present_frame, orient=HORIZONTAL)
+		self.present_frame_x.pack(fill=X, side=BOTTOM)
+		self.present_canvas = Canvas(self.present_frame, bg='#E0E0E0', highlightbackground='#E0E0E0', highlightcolor='#E0E0E0', yscrollcommand=self.present_frame_y.set, xscrollcommand=self.present_frame_x.set)
+		self.present_canvas.pack(fill=BOTH, expand=True)
+		self.present_canvas.configure(scrollregion=(0,0,1000,1000))
+		self.present_frame_y.config(command=self.present_canvas.yview)
+		self.present_frame_x.config(command=self.present_canvas.xview)
+		self.widget_layer = Frame(self.present_canvas, bg='#E0E0E0')
+		self.widget_layer.pack()
+		self.present_canvas.create_window(0, 0, window=self.widget_layer, anchor='nw')
 		## create the Back and Next buttons of this frame and bind them to methods
-		self.window_navigation = Frame(self.present_frame, bg='#E0E0E0')
-		self.window_navigation.pack(fill=X, expand=False, pady=5)
+		self.window_navigation = Frame(self.widget_layer, bg='#E0E0E0')
+		self.window_navigation.pack(fill=X, expand=False, pady=10, padx=100)
 		self.window_navigation.columnconfigure(0, weight=1)
 		self.window_navigation.columnconfigure(1, weight=1)
 		self.window_navigation.rowconfigure(0, weight=1)
@@ -2400,8 +2630,8 @@ class hgvs_child_id:
 		self.next_window.grid(row=0, column=1, sticky=W)
 		self.next_window.configure(state='disabled')
 		## creating the labels and entries in the input layout
-		self.parameters = LabelFrame(self.present_frame, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.parameters.pack(fill=X, expand=False, pady=8)
+		self.parameters = LabelFrame(self.widget_layer, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.parameters.pack(fill=X, expand=False, pady=10, padx=100)
 		self.parameters.columnconfigure(0, weight=1)
 		self.parameters.columnconfigure(1, weight=1)
 		self.parameters.columnconfigure(2, weight=1)
@@ -2431,8 +2661,8 @@ class hgvs_child_id:
 		self.help1.bind("<Leave>", lambda event: self.help1.configure(relief=GROOVE))
 		self.help1.bind("<Enter>", lambda event: self.help1.configure(cursor='hand', relief=RAISED))
 		#
-		self.max_af = LabelFrame(self.present_frame, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.max_af.pack(fill=X, expand=False, pady=8)
+		self.max_af = LabelFrame(self.widget_layer, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.max_af.pack(fill=X, expand=False, pady=10, padx=100)
 		self.max_af.columnconfigure(0, weight=1)
 		self.max_af.columnconfigure(1, weight=1)
 		self.max_af.columnconfigure(2, weight=1)
@@ -2455,8 +2685,8 @@ class hgvs_child_id:
 		self.help2.bind("<Leave>", lambda event: self.help2.configure(relief=GROOVE))
 		self.help2.bind("<Enter>", lambda event: self.help2.configure(cursor='hand', relief=RAISED))
 		#
-		self.cq_frame = LabelFrame(self.present_frame, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.cq_frame.pack(fill=X, expand=False, pady=8)
+		self.cq_frame = LabelFrame(self.widget_layer, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.cq_frame.pack(fill=X, expand=False, pady=10, padx=100)
 		self.cq_frame.columnconfigure(0, weight=1)
 		self.cq_frame.columnconfigure(1, weight=1)
 		self.cq_frame.rowconfigure(0, weight=1)
@@ -2498,8 +2728,8 @@ class hgvs_child_id:
 		self.help3.bind("<Leave>", lambda event: self.help3.configure(relief=GROOVE))
 		self.help3.bind("<Enter>", lambda event: self.help3.configure(cursor='hand', relief=RAISED))
 		#
-		self.submit_button = Button(self.present_frame, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
-		self.submit_button.pack(pady=8)
+		self.submit_button = Button(self.widget_layer, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
+		self.submit_button.pack(pady=10, padx=100)
 		## if the global variables that check the dot server/ddd_prod files are false or None, the Run button is disabled.
 		if (not self.server_file_check or not self.ddd_prod_check):
 			self.submit_button.configure(state='disabled')
@@ -2556,8 +2786,9 @@ class hgvs_child_id:
 		tkMessageBox.showinfo(title='CQ', message=help3_msg)
 	def backend_variant_execution(self):
 		"""This method starts the backend execution steps for variant extraction."""
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		## do if the error collection variable is not
 		if (not self.error_collect):
 			is_an_ensemble_transcript = None
@@ -2581,7 +2812,10 @@ class hgvs_child_id:
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.pl', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -2595,12 +2829,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				hgvs_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'hgvs_coords.tsv'
 				##
@@ -2619,14 +2859,18 @@ chmod 777 {backend_dir_name}{file_name}
 					self.error_collect = 'HGVS calculator error.'
 			elif (is_a_refseq_transcript):# Refseq case procedure:
 				## create expect file
-				build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+				if (not self.direct_ssh_mode):
+					build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 				##
 				os.system('python {a}local_scripts/hgvs_calculator_refseq_source_builder.py --o {b}recent_runs/{c}current_run.py --gui_path {d} --remote_dir {e} --hgvs \'{f}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_gui_abs_path, e=self.var_backend_dir, f=self.user_input['hgvs']))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -2640,12 +2884,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				hgvs_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'hgvs_coords.tsv'
 				##
@@ -2670,7 +2920,10 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -2684,12 +2937,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def backend_igv_execution(self):
 		"""This method starts the backend execution steps for IGV retrieval."""
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
@@ -2700,7 +2959,10 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -2714,12 +2976,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))	
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))	
 	def create_progress_bar(self):
 		"""Aesthetic method to create an indeterminate progress bar."""
 		self.progress = ttk.Progressbar(self.present_frame, orient="horizontal", length=300, mode="indeterminate")
@@ -2796,7 +3064,7 @@ chmod 777 {backend_dir_name}{file_name}
 			if (self.user_input['igv'] == 'no'):
 				prepare_result_tabs_igv_excluded(gui_abs_path=self.var_gui_abs_path,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input,backend_dir=self.var_backend_dir)
 			elif (self.user_input['igv'] == 'yes'):
-				prepare_result_tabs_igv_included(var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input)
+				prepare_result_tabs_igv_included(direct_ssh_mode=self.direct_ssh_mode,var_backend_dir=self.var_backend_dir,gui_abs_path=self.var_gui_abs_path,user_settings_var=self.var_user_settings,previous_frame=self.present_frame,present_frame=self.next_frame,past_frame=self.previous_frame,query_info=self.user_input)
 	def variant_sanity_check_and_proceed(self):
 		"""This method reads the JSON file from the server and checks the error key."""
 		variant_file_abs_path = self.var_gui_abs_path + 'recent_runs/'+self.var_backend_dir+'trio_variants.json'
@@ -2836,6 +3104,7 @@ class hgvs_cohort:
 	LOF = ['transcript_ablation','splice_donor_variant','splice_acceptor_variant','stop_gained','frameshift_variant','stop_lost','start_lost','inframe_insertion','inframe_deletion','missense_variant','transcript_amplification','protein_altering_variant']
 	def __init__(self, **kwargs):
 		## extracting the arguments
+		self.direct_ssh_mode = kwargs['direct_ssh_mode']
 		self.previous_frame_object = kwargs['previous_frame_object']
 		self.previous_frame = kwargs['previous_frame']
 		self.present_frame = kwargs['present_frame']
@@ -2862,9 +3131,22 @@ class hgvs_cohort:
 		time.sleep(1)
 		## the error collection variable
 		self.error_collect = ''
+		## setting up the scrollbars
+		self.present_frame_y = Scrollbar(self.present_frame, orient=VERTICAL)
+		self.present_frame_y.pack(fill=Y, side=RIGHT)
+		self.present_frame_x = Scrollbar(self.present_frame, orient=HORIZONTAL)
+		self.present_frame_x.pack(fill=X, side=BOTTOM)
+		self.present_canvas = Canvas(self.present_frame, bg='#E0E0E0', highlightbackground='#E0E0E0', highlightcolor='#E0E0E0', yscrollcommand=self.present_frame_y.set, xscrollcommand=self.present_frame_x.set)
+		self.present_canvas.pack(fill=BOTH, expand=True)
+		self.present_canvas.configure(scrollregion=(0,0,1000,1000))
+		self.present_frame_y.config(command=self.present_canvas.yview)
+		self.present_frame_x.config(command=self.present_canvas.xview)
+		self.widget_layer = Frame(self.present_canvas, bg='#E0E0E0')
+		self.widget_layer.pack()
+		self.present_canvas.create_window(0, 0, window=self.widget_layer, anchor='nw')
 		## create the Back and Next buttons of this frame and bind them to methods
-		self.window_navigation = Frame(self.present_frame, bg='#E0E0E0')
-		self.window_navigation.pack(fill=X, expand=False, pady=5)
+		self.window_navigation = Frame(self.widget_layer, bg='#E0E0E0')
+		self.window_navigation.pack(fill=X, expand=False, pady=10, padx=100)
 		self.window_navigation.columnconfigure(0, weight=1)
 		self.window_navigation.columnconfigure(1, weight=1)
 		self.window_navigation.rowconfigure(0, weight=1)
@@ -2879,8 +3161,8 @@ class hgvs_cohort:
 		self.next_window.grid(row=0, column=1, sticky=W)
 		self.next_window.configure(state='disabled')
 		## creating the labels and entries in the input layout
-		self.parameters = LabelFrame(self.present_frame, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.parameters.pack(fill=X, expand=False, pady=8)
+		self.parameters = LabelFrame(self.widget_layer, text='Parameters', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.parameters.pack(fill=X, expand=False, pady=10, padx=100)
 		self.parameters.columnconfigure(0, weight=1)
 		self.parameters.columnconfigure(1, weight=1)
 		self.parameters.rowconfigure(0, weight=1)
@@ -2897,8 +3179,8 @@ class hgvs_cohort:
 		self.help1.bind("<Leave>", lambda event: self.help1.configure(relief=GROOVE))
 		self.help1.bind("<Enter>", lambda event: self.help1.configure(cursor='hand', relief=RAISED))
 		#
-		self.max_af = LabelFrame(self.present_frame, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.max_af.pack(fill=X, expand=False, pady=8)
+		self.max_af = LabelFrame(self.widget_layer, text='Maximum Allele Frequency', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.max_af.pack(fill=X, expand=False, pady=10, padx=100)
 		self.max_af.columnconfigure(0, weight=1)
 		self.max_af.columnconfigure(1, weight=1)
 		self.max_af.columnconfigure(2, weight=1)
@@ -2920,8 +3202,8 @@ class hgvs_cohort:
 		self.help2.bind("<Leave>", lambda event: self.help2.configure(relief=GROOVE))
 		self.help2.bind("<Enter>", lambda event: self.help2.configure(cursor='hand', relief=RAISED))
 		#
-		self.cq_frame = LabelFrame(self.present_frame, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
-		self.cq_frame.pack(fill=X, expand=False, pady=8)
+		self.cq_frame = LabelFrame(self.widget_layer, text='Consequence', font='-weight bold', labelanchor='nw', bg='#C8C8C8', borderwidth=2, relief=GROOVE)
+		self.cq_frame.pack(fill=X, expand=False, pady=10, padx=100)
 		self.cq_frame.columnconfigure(0, weight=1)
 		self.cq_frame.columnconfigure(1, weight=1)
 		self.cq_frame.rowconfigure(0, weight=1)
@@ -2962,8 +3244,8 @@ class hgvs_cohort:
 		self.help3.bind("<Leave>", lambda event: self.help3.configure(relief=GROOVE))
 		self.help3.bind("<Enter>", lambda event: self.help3.configure(cursor='hand', relief=RAISED))
 		#
-		self.submit_button = Button(self.present_frame, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
-		self.submit_button.pack(pady=8)
+		self.submit_button = Button(self.widget_layer, text='Run', command=self.buffer, highlightbackground='#E0E0E0')
+		self.submit_button.pack(pady=10, padx=100)
 		## if the global variables that check the dot server/ddd_prod files are false or None, the Run button is disabled.
 		if (not self.server_file_check or not self.ddd_prod_check):
 			self.submit_button.configure(state='disabled')
@@ -3015,8 +3297,9 @@ class hgvs_cohort:
 		tkMessageBox.showinfo(title='CQ', message=help3_msg)
 	def backend_variant_execution(self):
 		"""This method starts the backend execution steps for variant extraction."""
-		build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		string_user_settings = ';'.join([':'.join([str(k),str(v)]) for k,v in self.var_user_settings.items()])
+		if (not self.direct_ssh_mode):
+			build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 		## do if the error collection variable is not
 		if (not self.error_collect):
 			is_an_ensemble_transcript = None
@@ -3033,14 +3316,18 @@ class hgvs_cohort:
 				regex_m = re.search('^(ENST\d+)', self.user_input['hgvs'])
 				user_transcript = regex_m.group(1)
 				##
-				build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+				if (not self.direct_ssh_mode):
+					build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 				##
 				os.system('python {a}local_scripts/hgvs_calculator_ensemble_source_builder.py --o {b}recent_runs/{c}current_run.pl --remote_dir {d} --hgvs_transcript \'{e}\' --hgvs_term \'{f}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_backend_dir, e=user_transcript, f=self.user_input['hgvs']))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.pl', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -3054,12 +3341,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				hgvs_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'hgvs_coords.tsv'
 				##
@@ -3078,14 +3371,18 @@ chmod 777 {backend_dir_name}{file_name}
 					self.error_collect = 'HGVS calculator error.'
 			elif (is_a_refseq_transcript):# Refseq case procedure:
 				## create expect file
-				build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+				if (not self.direct_ssh_mode):
+					build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 				##
 				os.system('python {a}local_scripts/hgvs_calculator_refseq_source_builder.py --o {b}recent_runs/{c}current_run.py --gui_path {d} --remote_dir {e} --hgvs \'{f}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_gui_abs_path, e=self.var_backend_dir, f=self.user_input['hgvs']))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -3099,12 +3396,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
 				hgvs_calculator_file_abs_path = self.var_gui_abs_path + 'recent_runs/' + self.var_backend_dir + 'hgvs_coords.tsv'
 				##
@@ -3129,7 +3432,10 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -3143,12 +3449,18 @@ chmod 777 {backend_dir_name}{file_name}
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
 			with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='cohort_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
-			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+			if (self.direct_ssh_mode):
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			else:
+				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			## run the first check point
 			self.sanity_check_and_proceed()
 			if (not self.error_collect):
@@ -3158,7 +3470,10 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -3172,12 +3487,18 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='selected_cohort_variants.tsv.gz', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				os.system('gunzip {a}recent_runs/{b}selected_cohort_variants.tsv.gz'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
@@ -3258,6 +3579,4 @@ chmod 777 {backend_dir_name}{file_name}
 			self.progress.destroy()
 			self.widget_lock('open_widgets')
 			self.next_window.configure(state='disabled')
-
-
 
