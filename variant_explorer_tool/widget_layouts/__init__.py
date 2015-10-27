@@ -114,7 +114,7 @@ def read_server_user_file(server_path):
 					return temp_dict
 				elif (len(test_char) == 2 and True not in test_char):
 					temp_dict['server_name'] = server_user[0]
-					temp_dict['server_user_password'] = server_user[1]
+					temp_dict['server_username'] = server_user[1]
 					return temp_dict
 			except:
 				return temp_dict
