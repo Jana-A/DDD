@@ -101,20 +101,14 @@ if (__name__ == '__main__'):
 		server_file_path = os.path.abspath(gui_abs_path+'.server_user')
 		server_reading_dict = read_server_user_file(server_file_path)
 		user_settings.update(server_reading_dict)
-		if (len(server_reading_dict.keys()) == 2):
-			direct_ssh_mode = True
-		else:
-			direct_ssh_mode = False
+		direct_ssh_mode = 'server_user_password' in server_reading_dict.keys()
 		notifications.append((tick, 'Detected the server user file in "{}"'.format(gui_abs_path), '#00CC00'))
 	elif (server_file_par):
 		server_file_check = True
 		server_file_path = os.path.abspath(gui_parent_path + '.server_user')
 		server_reading_dict = read_server_user_file(server_file_path)
 		user_settings.update(server_reading_dict)
-		if (len(server_reading_dict.keys()) == 2):
-			direct_ssh_mode = True
-		else:
-			direct_ssh_mode = False
+		direct_ssh_mode = 'server_user_password' in server_reading_dict.keys()
 		notifications.append((tick, 'Detected the server user file in "{}"'.format(gui_parent_path), '#00CC00'))	
 	## finding and reading the dot igv file and assiging the global variable relating to the dot igv file
 	if (not igv_file_curr and not igv_file_par):
