@@ -1,5 +1,6 @@
-# DDD
-The Deciphering Developmental Disorders Project.
+# WTSI.VET-DDD
+
+The variant explorer tool (VET) is used to find variants spanning a genomic location given one of the following: a genomic location (chromosome: start - stop), a gene name or an HGVS term. It also provides other useful options for exploring variants.
 
 A project at the Wellcome Trust Sanger Institute.
 
