@@ -1,5 +1,25 @@
 #!/usr/bin/env python
 
+"""
+-------------
+Copyright (c) 2015. Genome Research Ltd.
+Author: Deciphering Development Disorders Project Team.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
+See the License for the specific language governing permissions and
+limitations under the License.
+---------------
+"""
+
 from Tkinter import *
 import sys
 import ttk
@@ -8,7 +28,7 @@ import re
 import getpass
 import time
 import subprocess
-from subprocess import PIPE 
+from subprocess import PIPE
 from StringIO import StringIO
 import json
 import threading
@@ -123,7 +143,7 @@ if (__name__ == '__main__'):
 		igv_file_check = True
 		igv_file_path = os.path.abspath(gui_parent_path+'.igv_user')
 		user_settings.update(read_igv_user_file(igv_file_path))
-		notifications.append((tick, 'Detected the igv user file in "{}"'.format(gui_parent_path), '#00CC00'))			
+		notifications.append((tick, 'Detected the igv user file in "{}"'.format(gui_parent_path), '#00CC00'))
 	## finding and reading the dot ddd_prod file and assiging the global variable relating to the dot ddd_prod file
 	if (not ddd_prod_file_curr and not ddd_prod_file_par):
 		ddd_prod_file_check = False
@@ -148,7 +168,7 @@ if (__name__ == '__main__'):
 			if (not direct_ssh_mode):
 				cmd_exec = subprocess.Popen(['expect','{}recent_runs/{}current_expect'.format(gui_abs_path, backend_frontend_dir)], stdout=PIPE, stderr=PIPE)
 			else:
-				cmd_exec = subprocess.Popen(['bash', '{}recent_runs/{}current_command'.format(gui_abs_path, backend_frontend_dir)], stdout=PIPE, stderr=PIPE)	
+				cmd_exec = subprocess.Popen(['bash', '{}recent_runs/{}current_command'.format(gui_abs_path, backend_frontend_dir)], stdout=PIPE, stderr=PIPE)
 			standard_out, standard_err = cmd_exec.communicate()
 			if (re.search('/nfs/users/', standard_out) and not standard_err):
 				sanger_network_connect_check = True
@@ -243,6 +263,6 @@ if (__name__ == '__main__'):
 	container_frame.bind("<Configure>", calculator_widget.configure, add='+')
 	#
 	## bind a function to the event of quiting the interface
-	root.protocol("WM_DELETE_WINDOW", lambda: the_quiting_callback(root, user_settings, gui_abs_path, backend_frontend_dir))
+	root.protocol("WM_DELETE_WINDOW", lambda: the_quiting_callback(True, True, root, user_settings, gui_abs_path, backend_frontend_dir))
 	## this mainloop method of the root window is called to keep the script re-executing and not "execute and exit"
 	root.mainloop()

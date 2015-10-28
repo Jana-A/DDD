@@ -1,3 +1,25 @@
+#!/usr/bin/env python
+
+"""
+-------------
+Copyright (c) 2015. Genome Research Ltd.
+Author: Deciphering Development Disorders Project Team.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+
+See the License for the specific language governing permissions and
+limitations under the License.
+---------------
+"""
+
 from Tkinter import *
 import sys
 import ttk
@@ -73,7 +95,6 @@ expect "Permission denied, please try again."
 exit 1
 expect eof
 """.format(dir_name=gui_path, local_dump=temp_dump, passw=user_info['server_user_password'])
-	#
 	with open(gui_path+'recent_runs/'+temp_dump+'current_expect', 'w') as cmd:
 		cmd.write(expect_lines)
 
@@ -90,7 +111,7 @@ mkdir ~/{backend_dir_name}
 	with open(gui_path+'recent_runs/'+var_backend_dir+'current_command', 'w') as cmd:
 		cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=gui_path+'recent_runs/'+var_backend_dir+'server_command', user=user_info['server_username'], server=user_info['server_name'])]))
 	if (direct_ssh_mode):
-		os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+		os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=var_backend_dir))
 	else:
 		os.system('expect {a}recent_runs/{b}current_expect'.format(a=gui_path, b=var_backend_dir))
 	time.sleep(1)
@@ -104,7 +125,7 @@ def read_server_user_file(server_path):
 		with open(server_path, 'r') as server_user_file:
 			server_user_file = server_user_file.readlines()
 			try:
-				server_user = list(map(lambda x: re.sub('\n','',x), server_user_file))
+				server_user = list(map(lambda x: re.sub('(\r\n|\r|\n)','',x), server_user_file))
 				server_user = list(map(lambda x: re.sub('\s+','',x), server_user))
 				test_char = list(map(lambda x: not x, server_user))
 				if (len(test_char) == 3 and True not in test_char):
@@ -127,7 +148,7 @@ def read_igv_user_file(igv_path):
 		with open(igv_path, 'r') as igv_user_file:
 			igv_user_file = igv_user_file.readlines()
 			try:
-				igv_user = list(map(lambda x: re.sub('\n','',x), igv_user_file))
+				igv_user = list(map(lambda x: re.sub('(\r\n|\r|\n)','',x), igv_user_file))
 				igv_user = list(map(lambda x: re.sub('\s+','',x), igv_user))
 				temp_dict['igv_username'] = igv_user[0]
 				temp_dict['igv_user_password'] = igv_user[1]
@@ -143,7 +164,7 @@ def read_ddd_prod_user_file(ddd_prod_path):
 		with open(ddd_prod_path, 'r') as ddd_prod_user_file:
 			ddd_prod_user_file = ddd_prod_user_file.readlines()
 			try:
-				ddd_prod_user = list(map(lambda x: re.sub('\n','',x), ddd_prod_user_file))[0]
+				ddd_prod_user = list(map(lambda x: re.sub('(\r\n|\r|\n)','',x), ddd_prod_user_file))[0]
 				for i in ddd_prod_user.split(';'):
 					temp = i.split(':')
 					temp_dict[temp[0]] = temp[1]
@@ -450,7 +471,7 @@ class options_sidebar_setup:
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir=self.var_backend_dir)]))
 		## execute the expect script
 		if (self.direct_ssh_mode):
-			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 		else:
 			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		## the bash commands to run on the server
@@ -467,7 +488,7 @@ chmod 777 {file_name}
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 		##
 		if (self.direct_ssh_mode):
-			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 		else:
 			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		## build the followup python script to be executed on the backend side
@@ -477,7 +498,7 @@ chmod 777 {file_name}
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir=self.var_backend_dir)]))
 		##
 		if (self.direct_ssh_mode):
-			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 		else:
 			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		##
@@ -494,7 +515,7 @@ chmod 777 {file_name}
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 		##
 		if (self.direct_ssh_mode):
-			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 		else:
 			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		##
@@ -502,7 +523,7 @@ chmod 777 {file_name}
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], file_name=self.var_backend_dir+'final_freq', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 		##
 		if (self.direct_ssh_mode):
-			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 		else:
 			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		##
@@ -510,7 +531,7 @@ chmod 777 {file_name}
 			cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], file_name=self.var_backend_dir+'total_vcfs', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 		##
 		if (self.direct_ssh_mode):
-			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+			os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 		else:
 			os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 		## reading the server output files and displaying the variant frequency message
@@ -707,7 +728,7 @@ class calculator_setup:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			##
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			##
@@ -724,7 +745,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			##
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			##
@@ -732,7 +753,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='gene_calculator_out.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			##
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			## reading the server output file
@@ -785,7 +806,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.pl', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -802,7 +823,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -810,7 +831,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -846,7 +867,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -863,7 +884,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -871,7 +892,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -1167,7 +1188,7 @@ class genomic_coords_child_id:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1184,7 +1205,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1192,7 +1213,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def backend_igv_execution(self):
@@ -1208,7 +1229,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1225,7 +1246,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1233,7 +1254,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
@@ -1579,7 +1600,7 @@ class genomic_coords_cohort:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1596,7 +1617,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1604,7 +1625,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='cohort_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			## run the first check point
@@ -1616,10 +1637,10 @@ chmod 777 {backend_dir_name}{file_name}
 				with open(self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_command', 'w') as cmd:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
-			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
-			else:
-				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
+				if (self.direct_ssh_mode):
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
+				else:
+					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
 				server_cmd = r"""#!/usr/bin/env bash
 source /software/ddd/etc/profile.ddd
@@ -1634,7 +1655,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -1642,7 +1663,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='selected_cohort_variants.tsv.gz', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -1959,7 +1980,7 @@ class gene_name_child_id:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1976,7 +1997,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -1984,7 +2005,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='gene_calculator_out.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2026,7 +2047,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -2043,7 +2064,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -2051,7 +2072,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def backend_igv_execution(self):
@@ -2067,7 +2088,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2084,7 +2105,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2092,7 +2113,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def create_progress_bar(self):
@@ -2417,7 +2438,7 @@ class gene_name_cohort:
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2434,7 +2455,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2442,7 +2463,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='cohort_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2456,7 +2477,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -2473,7 +2494,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -2481,7 +2502,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='selected_cohort_variants.tsv.gz', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -2805,7 +2826,8 @@ class hgvs_child_id:
 				regex_m = re.search('^(ENST\d+)', self.user_input['hgvs'])
 				user_transcript = regex_m.group(1)
 				##
-				build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
+				if (not self.direct_ssh_mode):
+					build_expect_file(self.var_gui_abs_path, self.var_backend_dir, self.var_user_settings)
 				##
 				os.system('python {a}local_scripts/hgvs_calculator_ensemble_source_builder.py --o {b}recent_runs/{c}current_run.pl --remote_dir {d} --hgvs_transcript \'{e}\' --hgvs_term \'{f}\''.format(a=self.var_gui_abs_path, b=self.var_gui_abs_path, c=self.var_backend_dir, d=self.var_backend_dir, e=user_transcript, f=self.user_input['hgvs']))
 				##
@@ -2813,7 +2835,7 @@ class hgvs_child_id:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.pl', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -2830,7 +2852,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -2838,7 +2860,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -2868,7 +2890,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -2885,7 +2907,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -2893,7 +2915,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -2921,7 +2943,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2938,7 +2960,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2946,7 +2968,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 	def backend_igv_execution(self):
@@ -2960,7 +2982,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2977,7 +2999,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -2985,7 +3007,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='trio_igv.png', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))	
 	def create_progress_bar(self):
@@ -3325,7 +3347,7 @@ class hgvs_cohort:
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.pl', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -3342,7 +3364,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -3350,7 +3372,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -3380,7 +3402,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -3397,7 +3419,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -3405,7 +3427,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='hgvs_coords.tsv', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				##
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				##
@@ -3433,7 +3455,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -3450,7 +3472,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			#
@@ -3458,7 +3480,7 @@ chmod 777 {backend_dir_name}{file_name}
 				cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='cohort_variants.json', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 			#
 			if (self.direct_ssh_mode):
-				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+				os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 			else:
 				os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 			## run the first check point
@@ -3471,7 +3493,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {file_name} {user}@{server}:~/{backend_dir_name}\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'current_run.py', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -3488,7 +3510,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'cat {file_name} | ssh {user}@{server} bash\n'.format(file_name=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir+'server_command', user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'])]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
@@ -3496,7 +3518,7 @@ chmod 777 {backend_dir_name}{file_name}
 					cmd.write('\n'.join(['#!/usr/bin/env bash', 'scp {user}@{server}:~/{backend_dir_name}{file_name} {location}\n'.format(user=self.var_user_settings['server_username'], server=self.var_user_settings['server_name'], backend_dir_name=self.var_backend_dir, file_name='selected_cohort_variants.tsv.gz', location=self.var_gui_abs_path+'recent_runs/'+self.var_backend_dir)]))
 				#
 				if (self.direct_ssh_mode):
-					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=gui_path, local_dump=temp_dump))
+					os.system('bash {dir_name}recent_runs/{local_dump}current_command'.format(dir_name=self.var_gui_abs_path, local_dump=self.var_backend_dir))
 				else:
 					os.system('expect {a}recent_runs/{b}current_expect'.format(a=self.var_gui_abs_path, b=self.var_backend_dir))
 				#
